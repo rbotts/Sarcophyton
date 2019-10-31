@@ -1,0 +1,1072 @@
+---
+title: "Coral PCA and LDA"
+author: "Ryan Botts"
+date: "9/19/2019"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+# had working directory issues (knitr doesn't agree with the terminal and none of the fixes seem to work)
+
+```
+
+```{r settings, include=FALSE}
+ECHO_SETTING = FALSE #allows us to easily change setting in order to print all code, if necessary
+INCLUDE_SETTING = FALSE #allows us to easily change setting in order to print all code, if necessary
+EVAL_SETTING = FALSE #allos us to easily change setting to evalute all code, if necessary
+CACHE_SETTING = FALSE
+
+```
+
+```{r packages, include=INCLUDE_SETTING, echo=ECHO_SETTING}
+require(knitr)
+require(stats)
+require(corrplot)
+require(plot3D)
+require(dendextend)
+require(MASS)
+require(plyr)
+require(wavelets)
+require(cowplot)
+require(RColorBrewer)
+require(vegan) # used for PERMANOVA and computing dissimilarity matrix
+require(ape)
+require(ggfortify)
+require(dplyr)
+require(compositions) #as each row of areas sums to 1, we must consider this part of whole data or compositional data and thus we don't satisfy multivariate normality for MANOVA, we can overcome 
+require(mvtnorm) # used to test for multivariate normality
+require(PredPsych) # used for cross validation of LDA
+
+library(DiscriMiner) # used for PLS-DA
+
+
+# set base font size for graphics
+theme_set(theme_grey(base_size = 18))
+```
+
+Read data from files.  There is a much better way to read these in, but there were many, many hiccups and we need to be done, so this gets it done.
+```{r}
+# there are differences between the woking directory for knitr and the project and strange things happened, so I am forcing the directory here, may not be necessary
+#setwd("/Users/rbotts/Documents/Projects/Coral/CoralProject")
+tempdir <- getwd()
+pathtodat = paste0(tempdir,"/2016RawData/AllDCM/")
+#setwd("/Users/rbotts/Documents/Projects/Coral/CoralProject")
+#Create a vector to hold filenames of all DCM (medium polarity) data files
+filenamesDCM = c("PAL003DCM1.csv", "PAL006DCM1.csv", "PAL007DCM1.csv",
+                 "PAL014DCM1.csv", "PAL015DCM1.csv", "PAL017DCM1.csv",
+                 "PAL018DCM1.csv", "PAL019D3.csv",   "PAL029DCM1.csv",
+                 "PAL042D2.csv",   "PAL043DCM1.csv", "PAL044DCM1.csv",
+                 "PAL045DCM1.csv", "PAL048DCM1.csv", "PAL050D1.csv",
+                 "PAL052D1.csv",   "PAL052D2.csv",   "PAL130D1.csv",
+                 "PAL131D1.csv",   "PAL133D1.csv",   "PAL134D1.csv",
+                 "PAL137DCM1.csv", "PAL227D1.csv",   "PAL247DCM1.csv",
+                 "PAL248D1.csv",   "PAL250D1.csv",   "PAL250D2.csv",
+                 "PAL252DCM1.csv", "PAL270D1.csv",   "PAL299DCM1.csv",
+                 "PAL300D1.csv",   "PAL301D1.csv",   "PAL302D1.csv",
+                 "PAL306D1.csv",   "PAL307DCM1.csv", "PAL332D1.csv",
+                 "PAL333D1.csv",   "PAL334D1.csv",   "PAL340D1.csv",
+                 "PAL355D1.csv",   "PAL356D1.csv",   "PAL359D1.csv",
+                 "PAL362D1.csv",   "PAL374DCM1.csv", "PAL375D1.csv",
+                 "PAL378DCM1.csv", "PAL379DCM1.csv", "PAL382DCM1.csv")
+
+filenamesDCM <- paste0(pathtodat,filenamesDCM)
+
+# began work to speed this up
+#lapply(filenamesDCM,FUN = function(x){x = as.numeric(read.csv(x, header = FALSE)[TRUNC_BEGIN:TRUNC_END, 2])})
+
+#read in each dcm data file and store as a dataframe 
+PAL003DCM1 = read.csv(filenamesDCM[1],header=FALSE)
+PAL006DCM1 = read.csv(filenamesDCM[2],header=FALSE)
+PAL007DCM1 = read.csv(filenamesDCM[3],header=FALSE)
+PAL014DCM1 = read.csv(filenamesDCM[4],header=FALSE)
+PAL015DCM1 = read.csv(filenamesDCM[5],header=FALSE)
+PAL017DCM1 = read.csv(filenamesDCM[6],header=FALSE)
+PAL018DCM1 = read.csv(filenamesDCM[7],header=FALSE)
+PAL019DCM1 = read.csv(filenamesDCM[8],header=FALSE)
+PAL029DCM1 = read.csv(filenamesDCM[9],header=FALSE)
+PAL042DCM1 = read.csv(filenamesDCM[10],header=FALSE)
+PAL043DCM1 = read.csv(filenamesDCM[11],header=FALSE)
+PAL044DCM1 = read.csv(filenamesDCM[12],header=FALSE)
+PAL045DCM1 = read.csv(filenamesDCM[13],header=FALSE)
+PAL048DCM1 = read.csv(filenamesDCM[14],header=FALSE)
+PAL050DCM1 = read.csv(filenamesDCM[15],header=FALSE)
+PAL052DCM1 = read.csv(filenamesDCM[16],header=FALSE)
+PAL052DCM2 = read.csv(filenamesDCM[17],header=FALSE) # DISCARDED Broad peak @ 15.8 looked less like rest of data. Use D1.
+PAL130DCM1 = read.csv(filenamesDCM[18],header=FALSE)
+PAL131DCM1 = read.csv(filenamesDCM[19],header=FALSE)
+PAL133DCM1 = read.csv(filenamesDCM[20],header=FALSE)
+PAL134DCM1 = read.csv(filenamesDCM[21],header=FALSE)
+PAL137DCM1 = read.csv(filenamesDCM[22],header=FALSE)
+PAL227DCM1 = read.csv(filenamesDCM[23],header=FALSE)
+PAL247DCM1 = read.csv(filenamesDCM[24],header=FALSE)
+PAL248DCM1 = read.csv(filenamesDCM[25],header=FALSE)
+PAL250DCM1 = read.csv(filenamesDCM[26],header=FALSE)
+PAL250DCM2 = read.csv(filenamesDCM[27],header=FALSE)  # DISCARDED Graph 250D2 looked the same as 052D2. Use D1.
+PAL252DCM1 = read.csv(filenamesDCM[28],header=FALSE)
+PAL270DCM1 = read.csv(filenamesDCM[29],header=FALSE)
+PAL299DCM1 = read.csv(filenamesDCM[30],header=FALSE)
+PAL300DCM1 = read.csv(filenamesDCM[31],header=FALSE)
+PAL301DCM1 = read.csv(filenamesDCM[32],header=FALSE)
+PAL302DCM1 = read.csv(filenamesDCM[33],header=FALSE)
+PAL306DCM1 = read.csv(filenamesDCM[34],header=FALSE)
+PAL307DCM1 = read.csv(filenamesDCM[35],header=FALSE)
+PAL332DCM1 = read.csv(filenamesDCM[36],header=FALSE)
+PAL333DCM1 = read.csv(filenamesDCM[37],header=FALSE)
+PAL334DCM1 = read.csv(filenamesDCM[38],header=FALSE)
+PAL340DCM1 = read.csv(filenamesDCM[39],header=FALSE)
+PAL355DCM1 = read.csv(filenamesDCM[40],header=FALSE)
+PAL356DCM1 = read.csv(filenamesDCM[41],header=FALSE)
+PAL359DCM1 = read.csv(filenamesDCM[42],header=FALSE)
+PAL362DCM1 = read.csv(filenamesDCM[43],header=FALSE)
+PAL374DCM1 = read.csv(filenamesDCM[44],header=FALSE)
+PAL375DCM1 = read.csv(filenamesDCM[45],header=FALSE) # DISCARDED Chromatogram indicates nothing injected - removed
+PAL378DCM1 = read.csv(filenamesDCM[46],header=FALSE)
+PAL379DCM1 = read.csv(filenamesDCM[47],header=FALSE)
+PAL382DCM1 = read.csv(filenamesDCM[48],header=FALSE)
+
+
+
+
+## @knitr data_in_dataframes
+TRUNC_BEGIN = 30500#1 #first data point to use
+TRUNC_END = 46500 #77001second data point to use
+
+DELTA = 0.00033333333333 #Time increment by which intensity is measured (in minutes)
+
+#combine DCM data into one dataframe so that each row is one sample
+# first three columns give information about the sample
+# the following columns give instrument readings for "intensity" at a given time point (77001 time points)
+dfAllT_DCM = rbind(
+  #S. glaucum clade F - 24
+  c(003,"DCM","F", 1, 6.1, "Short Drop-Off", as.numeric(PAL003DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(006,"DCM","F", 1, 7.6, "Short Drop-Off", as.numeric(PAL006DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(007,"DCM","F", 1, 13.7, "Short Drop-Off", as.numeric(PAL007DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(014,"DCM","F", 1, 18.3, "Short Drop-Off", as.numeric(PAL014DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(015,"DCM","F", 1, 18.3, "Short Drop-Off", as.numeric(PAL015DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(017,"DCM","F", 1, 19.8, "Short Drop-Off", as.numeric(PAL017DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(018,"DCM","F", 1, 21.3, "Short Drop-Off", as.numeric(PAL018DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(043,"DCM","F", 2, 18.2, "West Channel", as.numeric(PAL043DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(044,"DCM","F", 2, 19.3, "West Channel", as.numeric(PAL044DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(048,"DCM","F", 2, 20.7,  "West Channel", as.numeric(PAL048DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(050,"DCM","F", 2, 21.5, "West Channel", as.numeric(PAL050DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(130,"DCM","F", 4, 17.1, "West Channel", as.numeric(PAL130DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(131,"DCM","F", 4, 15.9, "Wonder Channel", as.numeric(PAL131DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(133,"DCM","F", 4, 20.4,  "Wonder Channel", as.numeric(PAL133DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(134,"DCM","F", 4, 19.7,  "Wonder Channel", as.numeric(PAL134DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(248,"DCM","F", 8, 13.1,  "Wonder Channel", as.numeric(PAL248DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(270,"DCM","F", 9, 21.7, "NW Reef", as.numeric(PAL270DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(302,"DCM","F", 10, 19.0, "Peleliu", as.numeric(PAL302DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(333,"DCM","F", 11, 21.9, "Neco Channel", as.numeric(PAL333DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(334,"DCM","F", 11, 19.8, "Neco Channel", as.numeric(PAL334DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(374,"DCM","F", 13, 22.1, "KB Channel", as.numeric(PAL374DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(378,"DCM","F", 13, 21.6, "KB Channel", as.numeric(PAL378DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(382,"DCM","F", 13, 10.8, "KB Channel", as.numeric(PAL382DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(227,"DCM","F", 7, 20.5, "NW Reef", as.numeric(PAL227DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  
+  #S. glaucum clade D - 10
+  c(029,"DCM","D", 2, 19.6,  "West Channel", as.numeric(PAL029DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(247,"DCM","D", 8, 23.4, "NW Reef", as.numeric(PAL247DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(252,"DCM","D", 8, 15.4,  "NW Reef", as.numeric(PAL252DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(299,"DCM","D", 10, 8.0,  "Turtle Cove", as.numeric(PAL299DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(300,"DCM","D", 10, 17.4, "Turtle Cove", as.numeric(PAL300DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(306,"DCM","D", 10, 16.6, "Turtle Cove", as.numeric(PAL306DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(332,"DCM","D", 11, 13.1, "Neco Channel", as.numeric(PAL332DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(340,"DCM","D", 11, 14.8, "Neco Channel", as.numeric(PAL340DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(355,"DCM","D", 12, 20.6, "Short Drop-Off", as.numeric(PAL355DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(359,"DCM","D", 12, 10.9, "Short Drop-Off", as.numeric(PAL359DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  
+  #Trocheliophorum - 11
+  c(019,"DCM","T", 1, 18.3, "Short Drop-Off", as.numeric(PAL019DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(042,"DCM","T", 2, 16.7, "West Channel", as.numeric(PAL042DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(045,"DCM","T", 2, 13.0, "West Channel", as.numeric(PAL045DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(052,"DCM","T", 2, 14.3, "West Channel", as.numeric(PAL052DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(137,"DCM","T", 4, 5.2, "Wonder Channel", as.numeric(PAL137DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(250,"DCM","T", 8, 25.4, "NW Reef", as.numeric(PAL250DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(301,"DCM","T", 10, 7.0, "Turtle Cove", as.numeric(PAL301DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(307,"DCM","T", 10, 10.8, "Turtle Cove", as.numeric(PAL307DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(356,"DCM","T", 12, 13.1, "Short Drop-Off", as.numeric(PAL356DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(362,"DCM","T", 12, 21.9, "Short Drop-Off",  as.numeric(PAL362DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
+  c(379,"DCM","T", 13, 22.7, "KB Channel", as.numeric(PAL379DCM1[TRUNC_BEGIN:TRUNC_END, 2]))
+)
+
+
+
+colnames(dfAllT_DCM) <- c("Sample", "Greasiness", "Clade", "Site", "Depth", "SiteName",paste0("t",TRUNC_BEGIN:TRUNC_END))
+dfAllT_DCM <- data.frame(dfAllT_DCM, stringsAsFactors = FALSE)
+
+# convert chromatagrams to numeric, for some reason they change out of it.
+dfAllT_DCM[,paste0("t",TRUNC_BEGIN:TRUNC_END)] <- sapply(dfAllT_DCM[,paste0("t",TRUNC_BEGIN:TRUNC_END)],as.numeric)
+dfAllT_DCM[,1:6] <- sapply(dfAllT_DCM[,1:6],factor)
+#metad <- read.csv("metadata_GNPS_Sarcophyton_a.csv", header = TRUE)
+#colnames(metad)[colnames(metad)=="ATTRIBUTE_CollectionSite"] <- "Site"
+
+#metad <- metad[complete.cases(metad),]
+
+
+#dfAllT_DCM <- merge(dfAllT_DCM, unique(metad[,c("Site","SiteName")]))
+# for some reason values reset to factor
+#dfAllT_DCM[,paste0("t",TRUNC_BEGIN:TRUNC_END)] <- sapply(dfAllT_DCM[,paste0("t",TRUNC_BEGIN:TRUNC_END)],as.numeric)
+
+
+# create a short datasets of the categorical values
+
+df_DCM = data.frame(dfAllT_DCM[,c("Sample","Clade","Depth","Site", "SiteName")])#"SiteName"
+df_DCM$Site = factor(df_DCM$Site, levels= 1:13, ordered = TRUE)
+df_DCM$Clade = factor(df_DCM$Clade, levels = c("D","F","T"), labels = c("S. glaucum clade D","S. glaucum clade F","S. trocheliophorum"))
+df_DCM$Depth <- as.numeric(df_DCM$Depth)
+df_DCM$DepthCat <- NA
+df_DCM[df_DCM$Depth<10,"DepthCat"] <- "0-10"
+df_DCM[df_DCM$Depth>=10 & df_DCM$Depth<20,"DepthCat"] <- "10-20"
+df_DCM[df_DCM$Depth>=20 ,"DepthCat"] <- "20-30"
+df_DCM$DepthCat <- factor(df_DCM$DepthCat, levels = c("0-10","10-20","20-30"), ordered = TRUE)
+df_DCM$SiteName <- as.factor(df_DCM$SiteName)
+kable(table(df_DCM$SiteName, df_DCM$Clade))
+kable(table(df_DCM$DepthCat, df_DCM$Clade))
+
+setwd(tempdir)
+```
+
+
+Bin and normalize data from previous.  Hard coded from coralProject.R
+```{r}
+#computes the trapezoidal area of each time interval in the given vector using the delta as the height and the intensity readings of two successive rows as the side lengths
+trap <- function(intens, delta) { 
+  intens1 <- rep(intens)
+  intens1 = intens1[-1]
+  intens = intens[1:length(intens)-1]
+  trapArea = (intens + intens1)*delta/2
+  return(c(as.numeric(trapArea), 0))
+}
+
+
+#normalizes the vector input so that the total area adds to 1
+norm <- function(trapArea){
+  tot = sum(trapArea)
+  return(trapArea/tot)
+}
+
+#returns a binned matrix whose bins are the sums of the areas df for each bin interval
+#any remainder from ncol(df)/binwidth will not be included in the binned matrix
+binner <- function(dfArea, dfAllT, binWidth, delta) {
+  rowz = c()
+  for(j in 1:nrow(dfArea)) {
+    col = c()
+    for(i in seq(1, ncol(dfArea)-binWidth, binWidth)){
+      end = min(ncol(dfArea),i + binWidth - 1)
+      col = c(col, sum(as.numeric(dfArea[j,i:end])))
+    }
+    rowz = rbind(rowz, col)
+  }
+  bins = 1:ncol(rowz)
+  for (i in 1:ncol(rowz)){
+    bins[i] = paste("Bin", as.character(i))
+  }
+  dimnames(rowz) = list(dfAllT[,1], bins)
+  return(rowz)
+}
+
+# normalize each row requires the trapezoidal rule
+dfDCM_area = dfAllT_DCM[,paste0("t",TRUNC_BEGIN:TRUNC_END)]
+for(i in 1:nrow(dfDCM_area)){
+  dfDCM_area[i, ] = norm(trap(as.numeric(dfDCM_area[i, ]), DELTA))
+}
+```
+
+
+
+
+```{r chunkreading, include=INCLUDE_SETTING}
+
+
+#function to standardize processing of data (trimming and binning)
+procdata <- function(dfAllT, binwidth,  delta = DELTA){
+  # dfAllT should be a matrix of only the chromatogram values
+  df_area = dfAllT
+  for(i in 1:nrow(df_area)){
+    df_area[i, ] = norm(trap(as.numeric(df_area[i, ]), delta))
+  }
+  binned_matrix = binner(df_area, dfAllT, binwidth, delta)
+  return(binned_matrix)
+}
+
+pcaWorkNew <- function(type, binned_matrix, grpdat){
+ # binned matrix is a matrix of the trimmed and binned data
+# grpdat is a data frame of categorigal variables for defining plots
+  prc = prcomp(binned_matrix, center = TRUE, scale = FALSE)
+  
+  plot1 = autoplot(prc, data = grpdat, 
+                   colour = 'Clade',  size = 4)+
+    #ggtitle(paste0("PCA results for ", type, " with ",as.character(ncol(binned_matrix)), " bins")) +
+    ggtitle(paste0(as.character(ncol(binned_matrix)+1), 
+                   " bins")) +
+    scale_color_manual(values=
+                         c("#323efc","#fbb072","#6ac387"))+
+    theme(
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank(),
+      legend.text = element_text(face = "italic"),
+      legend.position="none") 
+  #+ #values = rev(colorRampPalette(brewer.pal(9, "BuGn"))(3)) +
+                           
+plot2 = autoplot(prc, data = grpdat, 
+                 colour = 'Depth',  size = 4)+
+    #ggtitle(paste0("PCA results for ", type, " with ",as.character(ncol(binned_matrix)), " bins"))  +
+    ggtitle(" ") +
+    #scale_color_brewer(palette="YlGn") +
+    scale_color_gradient(low = "skyblue", 
+                         high = "darkblue") + 
+    theme(
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank(),
+      legend.position="none")
+  
+  
+  
+plot3 = autoplot(prc, data = grpdat, 
+                 colour = 'SiteName', size = 4) +
+    #ggtitle(paste0("PCA results for ", type, " with ",as.character(ncol(binned_matrix)), " bins")) +
+    ggtitle(" ") +
+    scale_color_brewer(palette="Set1", name = "Site" ) + 
+    theme(
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank(),
+      legend.position="none")
+  
+  summary(prc)
+  print(plot1)
+  print(plot2)
+  print(plot3)
+  plot_grid(plot1,plot2,plot3,ncol = 3)
+  return(plot_grid(plot1,plot2,plot3,ncol = 3))
+}
+
+
+pcoaPlots <- function(binned_matrix,grps){
+    res <- pcoa(vegdist(binned_matrix, "bray", na.rm = TRUE))
+    plot1 = ggplot(data = grps, 
+                 aes(x=res$vectors[,1], 
+                     y=res$vectors[,2],
+                     color = Clade)) +
+          geom_point() +
+          ggtitle(paste0(as.character(ncol(binned_matrix)), " bins")) +
+          scale_color_manual(values=c("#323efc","#fbb072","#6ac387")) +
+          theme(axis.text.x = element_blank(),
+              axis.text.y = element_blank(),
+              axis.ticks = element_blank(),
+              legend.text = element_text(face = "italic"),
+              legend.position="none") +
+          xlab("Axis 1") + ylab("Axis 2")
+
+  temp1 <- plot1 + theme( legend.position="bottom") +
+          guides(color=guide_legend(nrow=3,byrow=TRUE)) 
+  
+  # plot for PCoA by depth
+ plot2 = ggplot(data = grps, 
+                 aes(x=res$vectors[,1], 
+                     y=res$vectors[,2], 
+                     color = DepthCat)) +
+              geom_point()  + 
+              ggtitle(" ") +
+              scale_color_manual(values=
+                  scales::seq_gradient_pal("skyblue",
+                        "darkblue", "Lab")(seq(0,1,
+                        length.out=3))) +
+              theme(axis.text.x = element_blank(),
+                axis.text.y = element_blank(),
+                axis.ticks = element_blank(),
+                legend.position="none") +
+              xlab("Axis 1") + ylab("Axis 2")
+  
+  temp2 <- plot2 + theme( legend.position="bottom") +
+          guides(color=guide_legend(nrow=3,byrow=TRUE)) 
+  
+  plot3 = ggplot(data = grps, 
+                 aes(x=res$vectors[,1], 
+                     y=res$vectors[,2], 
+                     color = SiteName)) + 
+              geom_point()  + 
+              ggtitle(" ") +
+              scale_color_brewer(palette="Set1", name = "Site" ) + 
+              theme(axis.text.x = element_blank(),
+                axis.text.y = element_blank(),
+                axis.ticks = element_blank(),
+                legend.position="none") +
+              xlab("Axis 1") + ylab("Axis 2")
+
+  temp3 <- plot3 + theme( legend.position="bottom") +
+          guides(color=guide_legend(nrow=3,byrow=TRUE)) 
+
+  #plot_grid(plot1,plot2,plot3,ncol = 3)
+  plot_grid(temp1,temp2,temp3,ncol = 3)
+  return(plot_grid(plot1,plot2,plot3,ncol = 3))
+}
+
+ldaWorkNew <- function(binned_matrix, grp, predictStat = TRUE){
+  # utility for systematically running the LDA, returns the LDA output for use in other functions
+  # binned matrix refers to the matrix of binned chromatagram data
+  # grp refers to the categorical response used in LDA
+  # returns info from fitting to data
+  lda_nocv = lda(grp ~ binned_matrix, CV=FALSE)
+  lda_nocv_pred = predict(lda_nocv,binned_matrix)
+  
+  #lda_cv = lda(grp ~ binned_matrix, CV=TRUE)
+  #lda_cv_pred = predict(lda_cv,binned_matrix)
+  
+  print(paste0("Train accuracy ",mean(lda_nocv_pred$class == factor(grp, ordered = FALSE))))
+  if(predictStat){
+    print("No crossvalidation LDA accuracy")
+    print(confusionMatrix(lda_nocv_pred$class, grp))
+  }  
+
+  return(lda_nocv_pred) 
+}
+
+ldaPlots <- function(binned_matrix, grps, type = "DCM"){
+  # utility for creating systematic LDA plots by clade, depth category and site
+  # binned_matrix is a matrix of the processed chromat.
+  # grps is a data frame of the categorical variables for the samples
+  # plot for LDA output by clade
+  ldaOutClade <- ldaWorkNew(binned_matrix, grps$Clade)
+  plot1 = ggplot(data = grps, 
+                 aes(x= ldaOutClade$x[,1],
+                     y=ldaOutClade$x[,2],
+                     color = Clade)) +
+          geom_point() +
+          stat_ellipse() +
+          ggtitle(paste0(as.character(ncol(binned_matrix)+1), " bins")) +
+          scale_color_manual(values=c("#323efc","#fbb072","#6ac387")) +
+          theme(axis.text.x = element_blank(),
+              axis.text.y = element_blank(),
+              axis.ticks = element_blank(),
+              legend.text = element_text(face = "italic"),
+              legend.position="none") +
+          xlab("LD1") + ylab("LD2")
+
+  temp1 <- plot1 + theme( legend.position="bottom") +
+          guides(color=guide_legend(nrow=3,byrow=TRUE)) 
+  
+  # plot for LDA by depth
+  ldaOutDp <- ldaWorkNew(binned_matrix, grps$DepthCat)
+  plot2 = ggplot(data = grps, 
+                 aes(x= ldaOutDp$x[,1],y=ldaOutDp$x[,2], 
+                     color = DepthCat)) +
+              geom_point()  + 
+              stat_ellipse() + 
+              ggtitle(" ") +
+              #scale_color_manual(values=
+              #    c("#323efc","#fbb072","#6ac387")) +
+    #scale_color_brewer(palette="YlGn", name = "Depth range") + 
+              scale_color_manual(values=
+                  scales::seq_gradient_pal("skyblue",
+                        "darkblue", "Lab")(seq(0,1,
+                        length.out=3))) +
+              theme(axis.text.x = element_blank(),
+                axis.text.y = element_blank(),
+                axis.ticks = element_blank(),
+                legend.position="none") +
+              xlab("LD1") + ylab("LD2")
+  
+  temp2 <- plot2 + theme( legend.position="bottom") +
+          guides(color=guide_legend(nrow=3,byrow=TRUE)) 
+  
+  ldaOutSite <- ldaWorkNew(binned_matrix, grps$SiteName)
+  plot3 = ggplot(data = grps, 
+                 aes(x= ldaOutSite$x[,1],y=ldaOutSite$x[,2], 
+                     color = SiteName)) + 
+              geom_point()  + 
+              stat_ellipse() + 
+              ggtitle(" ") +
+              scale_color_brewer(palette="Set1", name = "Site" ) + 
+              theme(axis.text.x = element_blank(),
+                axis.text.y = element_blank(),
+                axis.ticks = element_blank(),
+                legend.position="none") +
+              xlab("LD1") + ylab("LD2")
+
+  temp3 <- plot3 + theme( legend.position="bottom") +
+          guides(color=guide_legend(nrow=3,byrow=TRUE)) 
+  # temporarily add labels for printable plots
+  #temp1 = plot1 +
+  #theme(legend.position="bottom") 
+  #temp2 = plot2 +
+  #theme(legend.position="bottom") 
+  #temp3 = plot3 +
+  #theme(legend.position="bottom") 
+  #jpeg(paste0("LDAPlot",as.character(ncol(binned_matrix)),".jpg"), width = 1000, height = 300)
+  plot_grid(plot1,plot2,plot3,ncol = 3)
+  plot_grid(temp1,temp2,temp3,ncol = 3)
+  #dev.off()
+  
+  return(plot_grid(plot1,plot2,plot3,ncol = 3))
+}
+
+plsDAPlots <- function(binned_matrix, grps, type = "DCM"){
+  # utility for creating systematic LDA plots by clade, depth category and site
+  # binned_matrix is a matrix of the processed chromat.
+  # grps is a data frame of the categorical variables for the samples
+  OutClade <- plsDA(binned_matrix, grps$Clade,autosel = FALSE,
+                    comps = 3, cv = "LKO", k = 10)
+  plot1 = ggplot(data = grps, 
+                 aes(x= OutClade$components[,1],
+                     y=OutClade$components[,2],
+                     color = Clade)) +
+          geom_point() +
+          stat_ellipse() +
+          ggtitle(paste0(as.character(ncol(binned_matrix)), " bins")) +
+          scale_color_manual(values=c("#323efc","#fbb072","#6ac387")) +
+          theme(axis.text.x = element_blank(),
+              axis.text.y = element_blank(),
+              axis.ticks = element_blank(),
+              legend.text = element_text(face = "italic"),
+              legend.position="none") +
+          xlab("X 1") + ylab("X 2")
+
+  temp1 <- plot1 + theme( legend.position="bottom") +
+          guides(color=guide_legend(nrow=3,byrow=TRUE)) 
+  
+  # plot for LDA by depth
+  OutDp <- plsDA(binned_matrix, grps$DepthCat,
+                 autosel = FALSE, comps = 3, cv = "LKO", k = 10)
+  plot2 = ggplot(data = grps, 
+                 aes(x= OutDp$components[,1],
+                     y=OutDp$components[,2], 
+                     color = DepthCat)) +
+              geom_point()  + 
+              stat_ellipse() + 
+              ggtitle(" ") +
+              #scale_color_manual(values=
+              #    c("#323efc","#fbb072","#6ac387")) +
+    #scale_color_brewer(palette="YlGn", name = "Depth range") + 
+              scale_color_manual(values=
+                  scales::seq_gradient_pal("skyblue",
+                        "darkblue", "Lab")(seq(0,1,
+                        length.out=3))) +
+              theme(axis.text.x = element_blank(),
+                axis.text.y = element_blank(),
+                axis.ticks = element_blank(),
+                legend.position="none") +
+              xlab("X 1") + ylab("X 2")
+  
+  temp2 <- plot2 + theme( legend.position="bottom") +
+          guides(color=guide_legend(nrow=3,byrow=TRUE)) 
+  
+  OutSite <- plsDA(binned_matrix, grps$SiteName,
+                   autosel = FALSE, comps = 5, cv = "LKO", k = 10)
+  plot3 = ggplot(data = grps, 
+                 aes(x= OutSite$components[,1],
+                     y=OutSite$components[,2], 
+                     color = SiteName)) + 
+              geom_point()  + 
+              stat_ellipse() + 
+              ggtitle(" ") +
+              scale_color_brewer(palette="Set1", name = "Site" ) + 
+              theme(axis.text.x = element_blank(),
+                axis.text.y = element_blank(),
+                axis.ticks = element_blank(),
+                legend.position="none") +
+              xlab("X 1") + ylab("X 2")
+
+  temp3 <- plot3 + theme( legend.position="bottom") +
+          guides(color=guide_legend(nrow=3,byrow=TRUE)) 
+  # temporarily add labels for printable plots
+  #temp1 = plot1 +
+  #theme(legend.position="bottom") 
+  #temp2 = plot2 +
+  #theme(legend.position="bottom") 
+  #temp3 = plot3 +
+  #theme(legend.position="bottom") 
+  #jpeg(paste0("LDAPlot",as.character(ncol(binned_matrix)),".jpg"), width = 1000, height = 300)
+  plot_grid(plot1,plot2,plot3,ncol = 3)
+  plot_grid(temp1,temp2,temp3,ncol = 3)
+  #dev.off()
+  
+  return(plot_grid(plot1,plot2,plot3,ncol = 3))
+}
+
+```
+
+- Readings occur at delta = 0.00033333333333 seconds apart
+- We align all samples so based on their first time point
+- We omit the first 15000 time points (about 5 minutes) where there is little activity.
+- We omit the last 15002 time points (about 5 minutes) where there is little activity.
+- We take the trapezoidal area between two successive time point readings to approximate the area under the unknown curve between the given data points.
+- We normalize the trapezoidal areas after truncating in order to appropriately compare the readings between samples.
+- We bin the data to reduce the data's dimensionality. 
+    + Each bin represents one explanatory varialbe.
+    + We describe the bins by their "width" which is the number of time points included in each bin (or the total amount of time the bin's datapoints span)
+- See DataNotes for additional details.
+
+## Binning and preprocessing for analysis
+
+As the initial binned data is normalized to 1 for each row, we must view the data as compositional, thus we use an Isometric Log Ratio transform so that we may perform MANOVA on it.  See here ![](https://link.springer.com/article/10.1023/A:1023818214614)
+
+```{r}
+raw1 = procdata(dfAllT_DCM[,paste0("t",TRUNC_BEGIN:TRUNC_END)],1600)
+raw2 = procdata(dfAllT_DCM[,paste0("t",TRUNC_BEGIN:TRUNC_END)],1000)
+raw3 = procdata(dfAllT_DCM[,paste0("t",TRUNC_BEGIN:TRUNC_END)],800)
+raw4 = procdata(dfAllT_DCM[,paste0("t",TRUNC_BEGIN:TRUNC_END)],500)
+raw5 = procdata(dfAllT_DCM[,paste0("t",TRUNC_BEGIN:TRUNC_END)],100)
+rawAll = procdata(dfAllT_DCM[,paste0("t",TRUNC_BEGIN:TRUNC_END)],1)
+
+# transform data due to initial data being compositional
+d1 <- ilr(raw1)
+d2 <- ilr(raw2)
+d3 <- ilr(raw3)
+d4 <- ilr(raw4)
+d5 <- ilr(raw5)
+```
+
+
+# PCA analysis
+## Analysis of all bin sizes
+Create table of plots for all bin sizes
+```{r}
+bins1 = pcaWorkNew(type = "DCM", d1, df_DCM)
+bins2 = pcaWorkNew(type = "DCM", d2, df_DCM) #1454
+bins3 = pcaWorkNew(type = "DCM", d3, df_DCM)
+bins4 = pcaWorkNew(type = "DCM", d4, df_DCM)
+bins5 = pcaWorkNew(type = "DCM", d5, df_DCM)
+
+
+#plot_grid(bins1, bins2, bins3, bins4, bins5, nrow = 5)
+
+jpeg("PCAPlots.jpg", width = 1000, height = 1600)
+plot_grid(bins1, bins2, bins3, bins4, bins5, nrow = 5)
+dev.off()
+```
+## Analyze the 32 bin case individually
+
+Next we analyze the 32 bins only using PCA
+
+We begin by performing MANOVA on the raw binned data to determine if the data peaks actually appear to be clear.  MANOVA verifies that Clade membership oes explain the variation, while depth category and site do not.  We verify that reducing the dimension does not change this.
+
+
+
+```{r}
+
+#Plot single plot for figure
+prc = prcomp(d4, center = TRUE, scale = FALSE)
+summary(prc)
+
+# Select the principal components describing over 95% percent of the variance in the binned peaks.  For 32 bins, 8 principal components were selected.
+
+summary(manova(cbind(d4)~Clade, data = df_DCM))
+summary(manova(cbind(d4)~DepthCat, data = df_DCM))
+summary(manova(cbind(d4)~SiteName, data = df_DCM))
+
+# using MANOVA to assess how well the principal components are explained by each of the factors
+summary(manova(cbind(prc$x[,1:8])~Clade, data = df_DCM))
+summary(manova(cbind(prc$x[,1:8])~DepthCat, data = df_DCM))
+summary(manova(cbind(prc$x[,1:8])~SiteName, data = df_DCM))
+
+```
+Generate the graphics showing the groupings by PCA on 32 bins
+```{r}
+
+plot1 = autoplot(prc, data = df_DCM, 
+                 colour = 'Clade',  size = 4)+
+    ggtitle(paste0("PCA results with ",
+                   as.character(ncol(d4)+1), " bins")) +
+    scale_color_manual(values=
+                         c("#323efc","#fbb072","#6ac387"))+ 
+    theme(
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank(),
+      legend.text = element_text(face = "italic"),
+      legend.position="bottom"
+      ) + guides(colour=guide_legend(nrow=4,byrow=TRUE))
+  
+  plot2 = autoplot(prc, data = df_DCM, 
+                   colour = 'Depth',  size = 4)+
+    ggtitle(" ") +
+    #scale_color_brewer(palette="YlGn", name = "Depth range") +
+    scale_color_gradient(low = "skyblue", 
+                         high = "darkblue") +
+    theme(
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank(),
+      legend.position="bottom")
+
+  plot3 = autoplot(prc, data = df_DCM, 
+                   colour = 'SiteName', size = 4) +
+    ggtitle(" ") +
+    scale_color_brewer(palette="Set1", name = 'Site') + 
+    theme(
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank(),
+      legend.position="bottom"
+      ) + 
+    guides(colour=guide_legend(nrow=4,byrow=TRUE))
+  
+ 
+  
+  l1 = get_legend(plot1)
+  l2 = get_legend(plot2)
+  l3 = get_legend(plot3)
+  plot1 = plot1 + theme(legend.position = "none")
+  plot2 = plot2 + theme(legend.position = "none")
+  plot3 = plot3 + theme(legend.position = "none")
+  prow <- plot_grid(plot1,plot2,plot3, ncol = 3)
+  lrow <- plot_grid(l1,l2,l3, ncol = 3)
+
+jpeg("PCAPlot32.jpg", width = 1000, height = 500)
+  #plot_grid(plot1,plot2,plot3,ncol = 3,rel_heights = c(1, .3))
+plot_grid(prow,lrow, ncol = 1, rel_heights = c(1,.3))
+  
+dev.off()
+  
+```
+
+
+# LDA analysis
+
+## Analysis of all bin sizes
+Generate table of plots
+```{r}
+ldaPlots(d1, df_DCM)
+ldaPlots(d2, df_DCM)
+ldaPlots(d3, df_DCM)
+ldaPlots(d4, df_DCM)
+ldaPlots(d5, df_DCM)
+#p4 <- ldaPlots(d4, df_DCM)
+jpeg("LDAPlots.jpg", width = 1000, height = 1200)
+plot_grid(ldaPlots(d1, df_DCM),ldaPlots(d2, df_DCM),ldaPlots(d3, df_DCM),ldaPlots(d4, df_DCM),ldaPlots(d5, df_DCM), nrow = 5)
+dev.off()
+```
+
+## Analysis of 32 bins only
+LDA analysis for 32 bins 
+```{r}
+ldaOutClade <- ldaWorkNew(d4, df_DCM$Clade)
+ldaOutDp <- ldaWorkNew(d4, df_DCM$DepthCat)
+ldaOutSite <- ldaWorkNew(d4, df_DCM$SiteName)
+
+# use caret confusion matrix statistics
+#confusionMatrix(ldaOutClade$class, df_DCM$Clade)
+#confusionMatrix(ldaOutDp$class, df_DCM$DepthCat)
+#confusionMatrix(ldaOutSite$class, df_DCM$SiteName)
+
+# cross validation analysis using the PredPsych package
+LinearDA(data.frame(cbind(df_DCM$Clade, d4)), 1, cvFraction = .9, extendedResults = TRUE)
+LinearDA(data.frame(cbind(df_DCM$DepthCat, d4)), 1, cvFraction = .9, extendedResults = TRUE)
+LinearDA(data.frame(cbind(df_DCM$SiteName, d4)), 1, cvFraction = .9, extendedResults = TRUE)
+
+```
+
+figure for LDA for 32 bins
+```{r}
+
+plot1 = ggplot(data = df_DCM, 
+                 aes(x=ldaOutClade$x[,1], 
+                     y=ldaOutClade$x[,2],
+                     color = Clade))+
+          geom_point() +
+          stat_ellipse() +
+          ggtitle(paste0(
+            as.character(ncol(d4)+1), " bins")) +
+          scale_color_manual(values=
+                  c("#323efc","#fbb072","#6ac387")) +
+          xlab("LD1") + ylab("LD2") + 
+          theme(axis.text.x = element_blank(),
+                axis.text.y = element_blank(),
+                axis.ticks = element_blank(),
+                legend.text = element_text(
+                  face = "italic"),
+                legend.position="bottom"
+              ) + 
+          guides(color=guide_legend(nrow=4,byrow=TRUE))
+
+  
+# plot for LDA by depth
+
+plot2 = ggplot(data = df_DCM, 
+                 aes(x= ldaOutDp$x[,1],y=ldaOutDp$x[,2], 
+                     color = DepthCat)) +
+              geom_point()  + 
+              stat_ellipse() + ggtitle(" ") +
+              #scale_color_brewer(palette="YlBl", 
+              #       name = 'Depth range (m)') +
+              scale_color_manual(values=
+                  scales::seq_gradient_pal("skyblue",
+                        "darkblue", "Lab")(seq(0,1,
+                        length.out=3))) + 
+              xlab("LD1") + ylab("LD2") + 
+              theme(axis.text.x = element_blank(),
+                axis.text.y = element_blank(),
+                axis.ticks = element_blank(),
+              legend.position="bottom"
+              ) + 
+              guides(color=guide_legend(nrow=4,byrow=TRUE))
+  
+
+plot3 = ggplot(data = df_DCM, 
+                 aes(x= ldaOutSite$x[,1],
+                     y=ldaOutSite$x[,2], 
+                     color = SiteName)) + 
+              geom_point() +  
+              stat_ellipse() + 
+              ggtitle(" ") + 
+              scale_color_brewer(palette="Set1", 
+                                 name = 'Site')+
+              xlab("LD1") + 
+              ylab("LD2") + 
+              theme(axis.text.x = element_blank(),
+                axis.text.y = element_blank(),
+                axis.ticks = element_blank(),
+              legend.position="bottom"
+              ) + 
+              guides(color=guide_legend(nrow=4,byrow=TRUE))
+l1 = get_legend(plot1)
+l2 = get_legend(plot2)
+l3 = get_legend(plot3)
+plot1 = plot1 + theme(legend.position = "none")
+plot2 = plot2 + theme(legend.position = "none")
+plot3 = plot3 + theme(legend.position = "none")
+prow <- plot_grid(plot1,plot2,plot3, ncol = 3)
+lrow <- plot_grid(l1,l2,l3, ncol = 3)
+
+jpeg("LDAPlot32.jpg", width = 1000, height = 500)
+plot_grid(prow,lrow, ncol = 1, rel_heights = c(1,.3))
+dev.off() 
+#jpeg("LDAPlot32.jpg", width = 1000, height = 500)
+#  plot_grid(plot1,plot2,plot3,ncol = 3)
+#  dev.off()
+```
+# PCoA analysis
+Alternatively it PCA use Principal Coordinates analysis.  Doesn't appear to show useful patterns.
+
+## PCoA plots
+
+```{r}
+pcoaPlots(raw1, df_DCM)
+pcoaPlots(raw2, df_DCM)
+pcoaPlots(raw3, df_DCM)
+pcoaPlots(raw4, df_DCM)
+pcoaPlots(raw5, df_DCM)
+
+jpeg("PCoAPlots.jpg", width = 1000, height = 1200)
+plot_grid(pcoaPlots(raw1, df_DCM),pcoaPlots(raw2, df_DCM),pcoaPlots(raw3, df_DCM),pcoaPlots(raw4, df_DCM),pcoaPlots(raw5, df_DCM), nrow = 5)
+dev.off()
+```
+
+
+Compute the dissimilarity matrix using bray distance.  Run PERMANOVA to measure whether there are significant distances between groups.
+
+```{r}
+out = vegdist(raw4, "bray", na.rm = TRUE)
+res <- pcoa(out)
+summary(res)
+
+adonis(out ~ df_DCM$Clade)
+adonis(out ~ df_DCM$DepthCat)
+adonis(out ~ df_DCM$SiteName)
+```
+
+```{r}
+
+plot1 = ggplot(data = df_DCM, 
+                 aes(x=res$vectors[,1], 
+                     y=res$vectors[,2],
+                     color = Clade))+
+          geom_point() +
+          ggtitle(paste0(
+            as.character(ncol(raw4)), " bins")) +
+          scale_color_manual(values=
+                  c("#323efc","#fbb072","#6ac387")) +
+          xlab("Axis 1") + ylab("Axis 2") + 
+          theme(axis.text.x = element_blank(),
+                axis.text.y = element_blank(),
+                axis.ticks = element_blank(),
+                legend.text = element_text(
+                  face = "italic"),
+                legend.position="bottom"
+              ) + 
+          guides(color=guide_legend(nrow=4,byrow=TRUE))
+
+plot2 = ggplot(data = df_DCM, 
+                 aes(x=res$vectors[,1], 
+                     y=res$vectors[,2], 
+                     color = DepthCat)) +
+              geom_point()  + 
+              ggtitle(" ") +
+              #scale_color_brewer(palette="YlBl", 
+              #       name = 'Depth range (m)') +
+              scale_color_manual(values=
+                  scales::seq_gradient_pal("skyblue",
+                        "darkblue", "Lab")(seq(0,1,
+                        length.out=3))) + 
+              xlab("Axis 1") + ylab("Axis 2") + 
+              theme(axis.text.x = element_blank(),
+                axis.text.y = element_blank(),
+                axis.ticks = element_blank(),
+              legend.position="bottom"
+              ) + 
+              guides(color=guide_legend(nrow=4,byrow=TRUE))
+  
+
+plot3 = ggplot(data = df_DCM, 
+                 aes(x=res$vectors[,1], 
+                     y=res$vectors[,2], 
+                     color = SiteName)) + 
+              geom_point() +
+              ggtitle(" ") + 
+              scale_color_brewer(palette="Set1", 
+                                 name = 'Site')+
+              xlab("Axis 1") + 
+              ylab("Axis 2") + 
+              theme(axis.text.x = element_blank(),
+                axis.text.y = element_blank(),
+                axis.ticks = element_blank(),
+              legend.position="bottom"
+              ) + 
+              guides(color=guide_legend(nrow=4,byrow=TRUE))
+l1 = get_legend(plot1)
+l2 = get_legend(plot2)
+l3 = get_legend(plot3)
+plot1 = plot1 + theme(legend.position = "none")
+plot2 = plot2 + theme(legend.position = "none")
+plot3 = plot3 + theme(legend.position = "none")
+prow <- plot_grid(plot1,plot2,plot3, ncol = 3)
+lrow <- plot_grid(l1,l2,l3, ncol = 3)
+
+jpeg("PCoAPlot32.jpg", width = 1000, height = 500)
+plot_grid(prow,lrow, ncol = 1, rel_heights = c(1,.3))
+dev.off() 
+
+```
+
+
+
+# PLSDA
+```{r}
+p1 <- plsDAPlots(raw1, df_DCM)
+p2 <- plsDAPlots(raw2, df_DCM)
+p3 <- plsDAPlots(raw3, df_DCM)
+p4 <- plsDAPlots(raw4, df_DCM)
+p5 <- plsDAPlots(raw5, df_DCM)
+p6 <- plsDAPlots(rawAll, df_DCM)
+#p4 <- ldaPlots(d4, df_DCM)
+jpeg("PLS-DAPlots.jpg", width = 1000, height = 1200)
+plot_grid(p1,p2,p3,p4,p5,p6, nrow = 6)
+dev.off()
+```
+```{r}
+modAllClade <- plsDA(rawAll,df_DCM$Clade, autosel = FALSE, comps = 5, cv = "LKO", k = 10)
+modAllClade$R2
+modAllClade$Q2
+modAllClade$error_rate
+
+modAllDp <- plsDA(rawAll,df_DCM$DepthCat, autosel = FALSE, comps = 5, cv = "LKO", k = 10)
+modAllDp$R2
+modAllDp$Q2
+modAllDp$error_rate
+
+modAllSite <- plsDA(rawAll,df_DCM$SiteName, autosel = FALSE, comps = 5, cv = "LKO", k = 10)
+modAllSite$R2
+modAllSite$Q2
+modAllSite$error_rate
+
+```
+
+
+
+```{r}
+
+OutClade <- plsDA(raw4,df_DCM$Clade, autosel = FALSE, comps = 3, cv = "LKO", k = 10)
+OutClade$R2
+OutClade$Q2
+OutClade$error_rate
+
+OutDp <- plsDA(raw4,df_DCM$DepthCat, autosel = FALSE, comps = 3, cv = "LKO", k = 10)
+OutDp$R2
+OutDp$Q2
+OutDp$error_rate
+
+OutSite <- plsDA(raw4,df_DCM$SiteName, autosel = FALSE, comps = 3, cv = "LKO", k = 10)
+OutSite$R2
+OutSite$Q2
+OutSite$error_rate
+```
+figure for PLS-DA for 32 bins
+```{r}
+
+plot1 = ggplot(data = df_DCM, 
+                 aes(x=modAllClade$components[,1], 
+                     y=modAllClade$components[,2],
+                     color = Clade))+
+          geom_point() +
+          stat_ellipse() +
+          ggtitle(paste0(
+            as.character("PLS-DA on unbinned data"))) + #ncol(raw4)), " bins")) +
+          scale_color_manual(values=
+                  c("#323efc","#fbb072","#6ac387")) +
+          xlab("t1") + ylab("t2") + 
+          theme(axis.text.x = element_blank(),
+                axis.text.y = element_blank(),
+                axis.ticks = element_blank(),
+                legend.text = element_text(
+                  face = "italic"),
+                legend.position="bottom"
+              ) + 
+          guides(color=guide_legend(nrow=4,byrow=TRUE))
+
+plot(plot1)
+# plot for LDA by depth
+
+plot2 = ggplot(data = df_DCM, 
+                 aes(x= modAllDp$components[,1],
+                     y=modAllDp$components[,2], 
+                     color = DepthCat)) +
+              geom_point()  + 
+              stat_ellipse() + ggtitle(" ") +
+              #scale_color_brewer(palette="YlBl", 
+              #       name = 'Depth range (m)') +
+              scale_color_manual(values=
+                  scales::seq_gradient_pal("skyblue",
+                        "darkblue", "Lab")(seq(0,1,
+                        length.out=3))) + 
+              xlab("t1") + ylab("t2") + 
+              theme(axis.text.x = element_blank(),
+                axis.text.y = element_blank(),
+                axis.ticks = element_blank(),
+              legend.position="bottom"
+              ) + 
+              guides(color=guide_legend(nrow=4,byrow=TRUE))
+  
+
+plot3 = ggplot(data = df_DCM, 
+                 aes(x= modAllSite$components[,1],
+                     y= modAllSite$components[,2], 
+                     color = SiteName)) + 
+              geom_point() +  
+              stat_ellipse() + 
+              ggtitle(" ") + 
+              scale_color_brewer(palette="Set1", 
+                                 name = 'Site')+
+              xlab("t1") + 
+              ylab("t2") + 
+              theme(axis.text.x = element_blank(),
+                axis.text.y = element_blank(),
+                axis.ticks = element_blank(),
+              legend.position="bottom"
+              ) + 
+              guides(color=guide_legend(nrow=4,byrow=TRUE))
+l1 = get_legend(plot1)
+l2 = get_legend(plot2)
+l3 = get_legend(plot3)
+plot1 = plot1 + theme(legend.position = "none")
+plot2 = plot2 + theme(legend.position = "none")
+plot3 = plot3 + theme(legend.position = "none")
+prow <- plot_grid(plot1,plot2,plot3, ncol = 3)
+lrow <- plot_grid(l1,l2,l3, ncol = 3)
+
+jpeg("PLS-DAPlotAll.jpg", width = 1000, height = 500)
+plot_grid(prow,lrow, ncol = 1, rel_heights = c(1,.3))
+dev.off() 
+```
