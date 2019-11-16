@@ -1,6 +1,6 @@
 ---
 title: "Coral PCA and LDA"
-author: "Ryan Botts"
+author: "Ryan Botts, Elizabeth Maloney and Jason Chari"
 date: "9/19/2019"
 output: html_document
 ---
@@ -19,26 +19,26 @@ CACHE_SETTING = FALSE
 ```
 
 ```{r packages, include=INCLUDE_SETTING, echo=ECHO_SETTING}
-require(knitr)
-require(stats)
-require(corrplot)
-require(plot3D)
-require(dendextend)
-require(MASS)
-require(plyr)
-require(wavelets)
-require(cowplot)
-require(RColorBrewer)
-require(vegan) # used for PERMANOVA and computing dissimilarity matrix
-require(ape)
-require(ggfortify)
-require(dplyr)
-require(compositions) #as each row of areas sums to 1, we must consider this part of whole data or compositional data and thus we don't satisfy multivariate normality for MANOVA, we can overcome 
+library(knitr)
+library(stats)
+#library(corrplot)
+#library(plot3D)
+#library(dendextend)
+library(MASS)
+library(plyr)
+#library(wavelets)
+library(cowplot)
+library(RColorBrewer)
+library(vegan) # used for PERMANOVA and computing dissimilarity matrix
+library(ape)
+library(ggfortify)
+library(dplyr)
+library(compositions) #as each row of areas sums to 1, we must consider this part of whole data or compositional data and thus we don't satisfy multivariate normality for MANOVA, we can overcome 
 require(mvtnorm) # used to test for multivariate normality
 require(PredPsych) # used for cross validation of LDA
 
 library(DiscriMiner) # used for PLS-DA
-
+library(caret)
 
 # set base font size for graphics
 theme_set(theme_grey(base_size = 18))
@@ -50,82 +50,6 @@ Read data from files.  There is a much better way to read these in, but there we
 #setwd("/Users/rbotts/Documents/Projects/Coral/CoralProject")
 tempdir <- getwd()
 pathtodat = paste0(tempdir,"/2016RawData/AllDCM/")
-#setwd("/Users/rbotts/Documents/Projects/Coral/CoralProject")
-#Create a vector to hold filenames of all DCM (medium polarity) data files
-filenamesDCM = c("PAL003DCM1.csv", "PAL006DCM1.csv", "PAL007DCM1.csv",
-                 "PAL014DCM1.csv", "PAL015DCM1.csv", "PAL017DCM1.csv",
-                 "PAL018DCM1.csv", "PAL019D3.csv",   "PAL029DCM1.csv",
-                 "PAL042D2.csv",   "PAL043DCM1.csv", "PAL044DCM1.csv",
-                 "PAL045DCM1.csv", "PAL048DCM1.csv", "PAL050D1.csv",
-                 "PAL052D1.csv",   "PAL052D2.csv",   "PAL130D1.csv",
-                 "PAL131D1.csv",   "PAL133D1.csv",   "PAL134D1.csv",
-                 "PAL137DCM1.csv", "PAL227D1.csv",   "PAL247DCM1.csv",
-                 "PAL248D1.csv",   "PAL250D1.csv",   "PAL250D2.csv",
-                 "PAL252DCM1.csv", "PAL270D1.csv",   "PAL299DCM1.csv",
-                 "PAL300D1.csv",   "PAL301D1.csv",   "PAL302D1.csv",
-                 "PAL306D1.csv",   "PAL307DCM1.csv", "PAL332D1.csv",
-                 "PAL333D1.csv",   "PAL334D1.csv",   "PAL340D1.csv",
-                 "PAL355D1.csv",   "PAL356D1.csv",   "PAL359D1.csv",
-                 "PAL362D1.csv",   "PAL374DCM1.csv", "PAL375D1.csv",
-                 "PAL378DCM1.csv", "PAL379DCM1.csv", "PAL382DCM1.csv")
-
-filenamesDCM <- paste0(pathtodat,filenamesDCM)
-
-# began work to speed this up
-#lapply(filenamesDCM,FUN = function(x){x = as.numeric(read.csv(x, header = FALSE)[TRUNC_BEGIN:TRUNC_END, 2])})
-
-#read in each dcm data file and store as a dataframe 
-PAL003DCM1 = read.csv(filenamesDCM[1],header=FALSE)
-PAL006DCM1 = read.csv(filenamesDCM[2],header=FALSE)
-PAL007DCM1 = read.csv(filenamesDCM[3],header=FALSE)
-PAL014DCM1 = read.csv(filenamesDCM[4],header=FALSE)
-PAL015DCM1 = read.csv(filenamesDCM[5],header=FALSE)
-PAL017DCM1 = read.csv(filenamesDCM[6],header=FALSE)
-PAL018DCM1 = read.csv(filenamesDCM[7],header=FALSE)
-PAL019DCM1 = read.csv(filenamesDCM[8],header=FALSE)
-PAL029DCM1 = read.csv(filenamesDCM[9],header=FALSE)
-PAL042DCM1 = read.csv(filenamesDCM[10],header=FALSE)
-PAL043DCM1 = read.csv(filenamesDCM[11],header=FALSE)
-PAL044DCM1 = read.csv(filenamesDCM[12],header=FALSE)
-PAL045DCM1 = read.csv(filenamesDCM[13],header=FALSE)
-PAL048DCM1 = read.csv(filenamesDCM[14],header=FALSE)
-PAL050DCM1 = read.csv(filenamesDCM[15],header=FALSE)
-PAL052DCM1 = read.csv(filenamesDCM[16],header=FALSE)
-PAL052DCM2 = read.csv(filenamesDCM[17],header=FALSE) # DISCARDED Broad peak @ 15.8 looked less like rest of data. Use D1.
-PAL130DCM1 = read.csv(filenamesDCM[18],header=FALSE)
-PAL131DCM1 = read.csv(filenamesDCM[19],header=FALSE)
-PAL133DCM1 = read.csv(filenamesDCM[20],header=FALSE)
-PAL134DCM1 = read.csv(filenamesDCM[21],header=FALSE)
-PAL137DCM1 = read.csv(filenamesDCM[22],header=FALSE)
-PAL227DCM1 = read.csv(filenamesDCM[23],header=FALSE)
-PAL247DCM1 = read.csv(filenamesDCM[24],header=FALSE)
-PAL248DCM1 = read.csv(filenamesDCM[25],header=FALSE)
-PAL250DCM1 = read.csv(filenamesDCM[26],header=FALSE)
-PAL250DCM2 = read.csv(filenamesDCM[27],header=FALSE)  # DISCARDED Graph 250D2 looked the same as 052D2. Use D1.
-PAL252DCM1 = read.csv(filenamesDCM[28],header=FALSE)
-PAL270DCM1 = read.csv(filenamesDCM[29],header=FALSE)
-PAL299DCM1 = read.csv(filenamesDCM[30],header=FALSE)
-PAL300DCM1 = read.csv(filenamesDCM[31],header=FALSE)
-PAL301DCM1 = read.csv(filenamesDCM[32],header=FALSE)
-PAL302DCM1 = read.csv(filenamesDCM[33],header=FALSE)
-PAL306DCM1 = read.csv(filenamesDCM[34],header=FALSE)
-PAL307DCM1 = read.csv(filenamesDCM[35],header=FALSE)
-PAL332DCM1 = read.csv(filenamesDCM[36],header=FALSE)
-PAL333DCM1 = read.csv(filenamesDCM[37],header=FALSE)
-PAL334DCM1 = read.csv(filenamesDCM[38],header=FALSE)
-PAL340DCM1 = read.csv(filenamesDCM[39],header=FALSE)
-PAL355DCM1 = read.csv(filenamesDCM[40],header=FALSE)
-PAL356DCM1 = read.csv(filenamesDCM[41],header=FALSE)
-PAL359DCM1 = read.csv(filenamesDCM[42],header=FALSE)
-PAL362DCM1 = read.csv(filenamesDCM[43],header=FALSE)
-PAL374DCM1 = read.csv(filenamesDCM[44],header=FALSE)
-PAL375DCM1 = read.csv(filenamesDCM[45],header=FALSE) # DISCARDED Chromatogram indicates nothing injected - removed
-PAL378DCM1 = read.csv(filenamesDCM[46],header=FALSE)
-PAL379DCM1 = read.csv(filenamesDCM[47],header=FALSE)
-PAL382DCM1 = read.csv(filenamesDCM[48],header=FALSE)
-
-
-
 
 ## @knitr data_in_dataframes
 TRUNC_BEGIN = 30500#1 #first data point to use
@@ -133,82 +57,12 @@ TRUNC_END = 46500 #77001second data point to use
 
 DELTA = 0.00033333333333 #Time increment by which intensity is measured (in minutes)
 
-#combine DCM data into one dataframe so that each row is one sample
-# first three columns give information about the sample
-# the following columns give instrument readings for "intensity" at a given time point (77001 time points)
-dfAllT_DCM = rbind(
-  #S. glaucum clade F - 24
-  c(003,"DCM","F", 1, 6.1, "Short Drop-Off", as.numeric(PAL003DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(006,"DCM","F", 1, 7.6, "Short Drop-Off", as.numeric(PAL006DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(007,"DCM","F", 1, 13.7, "Short Drop-Off", as.numeric(PAL007DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(014,"DCM","F", 1, 18.3, "Short Drop-Off", as.numeric(PAL014DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(015,"DCM","F", 1, 18.3, "Short Drop-Off", as.numeric(PAL015DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(017,"DCM","F", 1, 19.8, "Short Drop-Off", as.numeric(PAL017DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(018,"DCM","F", 1, 21.3, "Short Drop-Off", as.numeric(PAL018DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(043,"DCM","F", 2, 18.2, "West Channel", as.numeric(PAL043DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(044,"DCM","F", 2, 19.3, "West Channel", as.numeric(PAL044DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(048,"DCM","F", 2, 20.7,  "West Channel", as.numeric(PAL048DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(050,"DCM","F", 2, 21.5, "West Channel", as.numeric(PAL050DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(130,"DCM","F", 4, 17.1, "West Channel", as.numeric(PAL130DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(131,"DCM","F", 4, 15.9, "Wonder Channel", as.numeric(PAL131DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(133,"DCM","F", 4, 20.4,  "Wonder Channel", as.numeric(PAL133DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(134,"DCM","F", 4, 19.7,  "Wonder Channel", as.numeric(PAL134DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(248,"DCM","F", 8, 13.1,  "Wonder Channel", as.numeric(PAL248DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(270,"DCM","F", 9, 21.7, "NW Reef", as.numeric(PAL270DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(302,"DCM","F", 10, 19.0, "Peleliu", as.numeric(PAL302DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(333,"DCM","F", 11, 21.9, "Neco Channel", as.numeric(PAL333DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(334,"DCM","F", 11, 19.8, "Neco Channel", as.numeric(PAL334DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(374,"DCM","F", 13, 22.1, "KB Channel", as.numeric(PAL374DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(378,"DCM","F", 13, 21.6, "KB Channel", as.numeric(PAL378DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(382,"DCM","F", 13, 10.8, "KB Channel", as.numeric(PAL382DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(227,"DCM","F", 7, 20.5, "NW Reef", as.numeric(PAL227DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  
-  #S. glaucum clade D - 10
-  c(029,"DCM","D", 2, 19.6,  "West Channel", as.numeric(PAL029DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(247,"DCM","D", 8, 23.4, "NW Reef", as.numeric(PAL247DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(252,"DCM","D", 8, 15.4,  "NW Reef", as.numeric(PAL252DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(299,"DCM","D", 10, 8.0,  "Turtle Cove", as.numeric(PAL299DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(300,"DCM","D", 10, 17.4, "Turtle Cove", as.numeric(PAL300DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(306,"DCM","D", 10, 16.6, "Turtle Cove", as.numeric(PAL306DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(332,"DCM","D", 11, 13.1, "Neco Channel", as.numeric(PAL332DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(340,"DCM","D", 11, 14.8, "Neco Channel", as.numeric(PAL340DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(355,"DCM","D", 12, 20.6, "Short Drop-Off", as.numeric(PAL355DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(359,"DCM","D", 12, 10.9, "Short Drop-Off", as.numeric(PAL359DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  
-  #Trocheliophorum - 11
-  c(019,"DCM","T", 1, 18.3, "Short Drop-Off", as.numeric(PAL019DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(042,"DCM","T", 2, 16.7, "West Channel", as.numeric(PAL042DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(045,"DCM","T", 2, 13.0, "West Channel", as.numeric(PAL045DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(052,"DCM","T", 2, 14.3, "West Channel", as.numeric(PAL052DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(137,"DCM","T", 4, 5.2, "Wonder Channel", as.numeric(PAL137DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(250,"DCM","T", 8, 25.4, "NW Reef", as.numeric(PAL250DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(301,"DCM","T", 10, 7.0, "Turtle Cove", as.numeric(PAL301DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(307,"DCM","T", 10, 10.8, "Turtle Cove", as.numeric(PAL307DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(356,"DCM","T", 12, 13.1, "Short Drop-Off", as.numeric(PAL356DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(362,"DCM","T", 12, 21.9, "Short Drop-Off",  as.numeric(PAL362DCM1[TRUNC_BEGIN:TRUNC_END, 2])),
-  c(379,"DCM","T", 13, 22.7, "KB Channel", as.numeric(PAL379DCM1[TRUNC_BEGIN:TRUNC_END, 2]))
-)
+dfAllT_DCM <- read.csv("AllTCoralDat.csv")
 
-
-
-colnames(dfAllT_DCM) <- c("Sample", "Greasiness", "Clade", "Site", "Depth", "SiteName",paste0("t",TRUNC_BEGIN:TRUNC_END))
-dfAllT_DCM <- data.frame(dfAllT_DCM, stringsAsFactors = FALSE)
-
-# convert chromatagrams to numeric, for some reason they change out of it.
 dfAllT_DCM[,paste0("t",TRUNC_BEGIN:TRUNC_END)] <- sapply(dfAllT_DCM[,paste0("t",TRUNC_BEGIN:TRUNC_END)],as.numeric)
 dfAllT_DCM[,1:6] <- sapply(dfAllT_DCM[,1:6],factor)
-#metad <- read.csv("metadata_GNPS_Sarcophyton_a.csv", header = TRUE)
-#colnames(metad)[colnames(metad)=="ATTRIBUTE_CollectionSite"] <- "Site"
 
-#metad <- metad[complete.cases(metad),]
-
-
-#dfAllT_DCM <- merge(dfAllT_DCM, unique(metad[,c("Site","SiteName")]))
-# for some reason values reset to factor
-#dfAllT_DCM[,paste0("t",TRUNC_BEGIN:TRUNC_END)] <- sapply(dfAllT_DCM[,paste0("t",TRUNC_BEGIN:TRUNC_END)],as.numeric)
-
-
-# create a short datasets of the categorical values
+# create a short datasets of the categorical values for use in some of the functions that require X in one matrix and the classes in a data frame
 
 df_DCM = data.frame(dfAllT_DCM[,c("Sample","Clade","Depth","Site", "SiteName")])#"SiteName"
 df_DCM$Site = factor(df_DCM$Site, levels= 1:13, ordered = TRUE)
@@ -223,7 +77,6 @@ df_DCM$SiteName <- as.factor(df_DCM$SiteName)
 kable(table(df_DCM$SiteName, df_DCM$Clade))
 kable(table(df_DCM$DepthCat, df_DCM$Clade))
 
-setwd(tempdir)
 ```
 
 
@@ -633,7 +486,7 @@ bins5 = pcaWorkNew(type = "DCM", d5, df_DCM)
 
 #plot_grid(bins1, bins2, bins3, bins4, bins5, nrow = 5)
 
-jpeg("PCAPlots.jpg", width = 1000, height = 1600)
+pdf("PCAPlots.pdf", width = 8, height = 14)
 plot_grid(bins1, bins2, bins3, bins4, bins5, nrow = 5)
 dev.off()
 ```
@@ -715,7 +568,7 @@ plot1 = autoplot(prc, data = df_DCM,
   prow <- plot_grid(plot1,plot2,plot3, ncol = 3)
   lrow <- plot_grid(l1,l2,l3, ncol = 3)
 
-jpeg("PCAPlot32.jpg", width = 1000, height = 500)
+pdf("PCAPlot32.pdf", width = 13, height = 5.5)
   #plot_grid(plot1,plot2,plot3,ncol = 3,rel_heights = c(1, .3))
 plot_grid(prow,lrow, ncol = 1, rel_heights = c(1,.3))
   
@@ -735,7 +588,7 @@ ldaPlots(d3, df_DCM)
 ldaPlots(d4, df_DCM)
 ldaPlots(d5, df_DCM)
 #p4 <- ldaPlots(d4, df_DCM)
-jpeg("LDAPlots.jpg", width = 1000, height = 1200)
+pdf("LDAPlots.pdf", , width = 8, height = 14)
 plot_grid(ldaPlots(d1, df_DCM),ldaPlots(d2, df_DCM),ldaPlots(d3, df_DCM),ldaPlots(d4, df_DCM),ldaPlots(d5, df_DCM), nrow = 5)
 dev.off()
 ```
@@ -831,7 +684,7 @@ plot3 = plot3 + theme(legend.position = "none")
 prow <- plot_grid(plot1,plot2,plot3, ncol = 3)
 lrow <- plot_grid(l1,l2,l3, ncol = 3)
 
-jpeg("LDAPlot32.jpg", width = 1000, height = 500)
+pdf("LDAPlot32.pdf", width = 13, height = 5.5)
 plot_grid(prow,lrow, ncol = 1, rel_heights = c(1,.3))
 dev.off() 
 #jpeg("LDAPlot32.jpg", width = 1000, height = 500)
@@ -850,7 +703,7 @@ pcoaPlots(raw3, df_DCM)
 pcoaPlots(raw4, df_DCM)
 pcoaPlots(raw5, df_DCM)
 
-jpeg("PCoAPlots.jpg", width = 1000, height = 1200)
+pdf("PCoAPlots.pdf", width = 8, height = 14)
 plot_grid(pcoaPlots(raw1, df_DCM),pcoaPlots(raw2, df_DCM),pcoaPlots(raw3, df_DCM),pcoaPlots(raw4, df_DCM),pcoaPlots(raw5, df_DCM), nrow = 5)
 dev.off()
 ```
@@ -935,7 +788,7 @@ plot3 = plot3 + theme(legend.position = "none")
 prow <- plot_grid(plot1,plot2,plot3, ncol = 3)
 lrow <- plot_grid(l1,l2,l3, ncol = 3)
 
-jpeg("PCoAPlot32.jpg", width = 1000, height = 500)
+pdf("PCoAPlot32.pdf", width = 1000, height = 500)
 plot_grid(prow,lrow, ncol = 1, rel_heights = c(1,.3))
 dev.off() 
 
@@ -952,7 +805,7 @@ p4 <- plsDAPlots(raw4, df_DCM)
 p5 <- plsDAPlots(raw5, df_DCM)
 p6 <- plsDAPlots(rawAll, df_DCM)
 #p4 <- ldaPlots(d4, df_DCM)
-jpeg("PLS-DAPlots.jpg", width = 1000, height = 1200)
+pdf("PLS-DAPlots.pdf", width = 8, height = 14)
 plot_grid(p1,p2,p3,p4,p5,p6, nrow = 6)
 dev.off()
 ```
@@ -993,7 +846,7 @@ OutSite$R2
 OutSite$Q2
 OutSite$error_rate
 ```
-figure for PLS-DA for 32 bins
+figure for PLS-DA for Full Data
 ```{r}
 
 plot1 = ggplot(data = df_DCM, 
@@ -1066,7 +919,7 @@ plot3 = plot3 + theme(legend.position = "none")
 prow <- plot_grid(plot1,plot2,plot3, ncol = 3)
 lrow <- plot_grid(l1,l2,l3, ncol = 3)
 
-jpeg("PLS-DAPlotAll.jpg", width = 1000, height = 500)
+pdf("PLS-DAPlotAll.pdf", width = 8, height = 3.5)
 plot_grid(prow,lrow, ncol = 1, rel_heights = c(1,.3))
 dev.off() 
 ```
